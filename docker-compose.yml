@@ -1,0 +1,77 @@
+# Setup check (at home; the first run downloads Ollama and the model, ~2 GB):
+#                  docker compose run --rm quokka python -m quokka check
+# Start the lab:   docker compose up    then open http://localhost:9080
+# The model alone: docker compose run --rm model
+# Stop it:         Ctrl+C, then  docker compose down
+# Start over:      docker compose down -v   (deletes saved progress AND the model)
+#
+# Ollama runs in its own container, pinned to the release the levels were
+# tuned on. It uses the CPU only (no GPU passthrough), and it is not published
+# to your laptop: only the lab reaches it, over Docker's internal network.
+#
+# Already run Ollama on your laptop (and pulled qwen2.5:3b-instruct)? You can
+# use it instead: put the line
+#     QUOKKA_OLLAMA_URL=http://host.docker.internal:11434
+# in a file named .env next to this one, and start with
+#     docker compose up --no-deps quokka
+# (the README has the details).
+services:
+  ollama:
+    # Ollama 0.40.16 without its GPU libraries (ollama/Dockerfile): a 61 MB
+    # download instead of 3.4 GB. No `build:` here on purpose: `docker compose
+    # build` would build it (downloading the full official image) even though
+    # the pull works. Can't download it? See the README's Troubleshooting.
+    image: ghcr.io/aicode-huji/quokka-ollama-cpu:0.40.16
+    attach: false        # keep its request log out of the lab's terminal
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      start_period: 30s
+      start_interval: 1s     # every second while Ollama starts
+      interval: 60s          # then once a minute
+      timeout: 5s
+      retries: 3
+
+  # One-shot: downloads the model into the ollama-models volume (about 1.9 GB).
+  model:
+    image: ghcr.io/aicode-huji/quokka-ollama-cpu:0.40.16
+    profiles: ["setup"]
+    environment:
+      OLLAMA_HOST: "http://ollama:11434"
+    command: ["pull", "qwen2.5:3b-instruct"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  quokka:
+    # The lab itself, built from the Dockerfile and published by
+    # .github/workflows/lab-image.yml. Pulled, never built here: a build would
+    # leave a build cache on your laptop that `docker compose down --rmi all`
+    # doesn't remove. Changing quokka/ yourself? See the README's "Working on the lab".
+    image: ghcr.io/aicode-huji/quokka-lab:2.0
+    environment:
+      QUOKKA_BIND: "0.0.0.0"          # inside the container only; see ports below
+      QUOKKA_OLLAMA_URL: "${QUOKKA_OLLAMA_URL:-http://ollama:11434}"
+      QUOKKA_DATA_DIR: "/data"
+    # So the opt-in's host.docker.internal reaches the laptop on Linux too
+    # (Docker Desktop defines it already).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Your progress (progress.json) is kept in this volume, so it survives
+    # `docker compose down`. Start over: `docker compose down -v`.
+    volumes:
+      - quokka-progress:/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # 127.0.0.1 only: the lab is reachable from your laptop, not the network.
+    ports:
+      - "127.0.0.1:9080:9080"
+      - "127.0.0.1:9081:9081"
+      - "127.0.0.1:9082:9082"
+      - "127.0.0.1:9083:9083"
+
+volumes:
+  quokka-progress:
+  ollama-models:

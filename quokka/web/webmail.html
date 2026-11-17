@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-window="webmail">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webmail: red team</title>
+<script>/* This window's theme, set before the first paint. See themeToggle() in common.js. */
+try { const t = (/theme=(light|dark)/.exec(location.hash) || [])[1] ||
+        localStorage.getItem('quokka-theme:' + document.documentElement.dataset.window);
+      if (t === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}</script>
+<link rel="stylesheet" href="/common.css">
+<style>
+  main { max-width: 820px; margin: 18px auto; padding: 0 16px; }
+  #p-webmail { min-height: calc(100vh - 110px); }
+</style>
+
+<header class="topbar">
+  <div class="brand"><span id="logo"></span><b>Red team webmail</b>
+    <span>redteam.example</span></div>
+  <div class="spacer"></div>
+  <span class="who">signed in as <b class="js-me"></b></span>
+</header>
+<main>
+  <section class="panel" id="p-webmail">
+    <div class="panel-h"><h2>Write to Ronit Vale</h2><span class="meta">Head of Release, Quokka Labs</span></div>
+    <div id="webmail" style="display:flex;flex-direction:column;min-height:0;flex:1"></div>
+  </section>
+</main>
+
+<script src="/common.js"></script>
+<script>
+$('logo').innerHTML = LOGO;
+themeToggle(document.querySelector('.topbar'));
+const webmail = Webmail($('webmail'), {onSent: () => refresh()});
+const refresh = poll(1200, s => webmail.update(s));
+</script>

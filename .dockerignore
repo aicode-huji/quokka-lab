@@ -1,0 +1,14 @@
+# Only quokka/ is copied into the image; keep everything else out of the build context.
+.git
+.gitignore
+.claude
+prototype/
+docs/
+tests/
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.venv
+venv
+*.md
+.env

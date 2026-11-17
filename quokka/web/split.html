@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en" data-window="mission-control">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quokka Labs mission control</title>
+<script>/* This window's theme, set before the first paint. See themeToggle() in common.js. */
+try { const t = (/theme=(light|dark)/.exec(location.hash) || [])[1] ||
+        localStorage.getItem('quokka-theme:' + document.documentElement.dataset.window);
+      if (t === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}</script>
+<link rel="stylesheet" href="/common.css">
+<link rel="stylesheet" href="/guide.css">
+<style>
+  /* Mission control: one task at a time.
+       left    your email (write to Ronit; replies below)
+       centre  Quokka's shell, the thing to watch (Ronit's inbox folds into a strip on top)
+       right   the public release notes: v5 or v4, nothing else
+     Hints, progress and challenges wait behind the Hints & report button (a drawer). */
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .grid {
+    flex: 1; min-height: 0; display: grid; gap: 14px; padding: 14px;
+    grid-template-columns: minmax(290px, 340px) minmax(0, 1fr) minmax(250px, 300px);
+  }
+  /* the side columns are quiet: no glass, no shadow; the shell carries the weight */
+  .quiet { background: var(--quiet); box-shadow: none; backdrop-filter: none;
+           -webkit-backdrop-filter: none; }
+  #p-shell { --accent: var(--cyan); border-color: var(--line-2); }
+  #p-shell .panel-h h2 { font-family: var(--mono); font-weight: 600; font-size: 12.5px; }
+  #p-public .panel-b { padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 16px; }
+  #p-public .ver { font-size: 76px; }
+  #p-public .ver-wrap { gap: 8px 16px; }
+  #p-public .tamper-stamp { font-size: 12px; padding: 3px 8px; }
+  #p-public .rel-model { display: none; }
+  #feedback[hidden] { display: none; }
+  /* the centre column: Ronit's inbox on top, Quokka below, as two panels */
+  .centre { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 14px; }
+  /* the two share the column equally; each scrolls inside itself */
+  #p-inbox, #p-shell { flex: 1 1 0; min-height: 0; }
+  /* the console carries the model's tokens too, so it gets the larger share */
+  #p-shell { flex-grow: 1.7; }
+  #p-inbox .inbox-list { flex: 1; max-height: none; padding-top: 8px; }
+  /* panel headings: a role tag, the name, and what the panel is for */
+  .role-h { gap: 12px; min-height: 60px; padding: 10px 14px; }
+  .role-h h2 { font-size: 19px; }
+  #p-shell .role-h h2 { font-family: var(--sans); font-weight: 650; font-size: 19px; }
+  .role-t { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .role-h h2 { white-space: normal; line-height: 1.2; }   /* wraps in the narrow side panels */
+  .role-sub { font-size: 13.5px; color: var(--muted); white-space: nowrap; overflow: hidden;
+              text-overflow: ellipsis; }
+  /* each box has its colour: amber you, violet Ronit, cyan the agent, mint public */
+  #p-webmail { --c: var(--amber); }  #p-inbox  { --c: var(--violet); }
+  #p-shell   { --c: var(--cyan); }   #p-public { --c: var(--mint); }
+  #p-public.answer { --c: var(--amber); }   /* Part 2: your answer box, not a public page */
+  .role { flex: none; font: 800 13.5px var(--sans); letter-spacing: 0.08em; text-transform: uppercase;
+          padding: 5px 10px; border-radius: 5px; border: 1.5px solid;
+          color: var(--c); border-color: color-mix(in srgb, var(--c) 60%, transparent);
+          background: color-mix(in srgb, var(--c) 10%, transparent); }
+  /* The cover: a closed box, in the box's own place, until the student opens it.
+     It comes back on every new level (see covers in the script below). */
+  .cover { position: absolute; inset: 0; z-index: 5; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; gap: 10px; padding: 18px;
+           text-align: center; border: 0; border-radius: inherit; cursor: pointer;
+           font: inherit; color: var(--text);
+           background: color-mix(in srgb, var(--c) 9%, var(--bg)); transition: background 0.2s; }
+  .cover[hidden] { display: none; }
+  .cover:hover, .cover:focus-visible { outline: 2px solid var(--c); outline-offset: -2px;
+           background: color-mix(in srgb, var(--c) 16%, var(--bg)); }
+  .cv-role { font: 800 19px var(--sans); letter-spacing: 0.1em; text-transform: uppercase;
+             color: var(--c); border: 2px solid; border-radius: 7px; padding: 6px 16px; }
+  .cv-title { font-size: 22px; font-weight: 650; line-height: 1.25; }
+  .cv-sub { font-size: 15px; color: var(--muted); max-width: 32ch; line-height: 1.4; }
+  .cv-live { font-size: 14px; font-weight: 600; color: var(--c); }
+  .cv-live:empty { display: none; }
+  .cv-open { margin-top: 6px; padding: 10px 20px; border-radius: 999px; font: 700 15.5px var(--sans);
+             background: var(--c); color: var(--on-accent); transition: transform 0.15s; }
+  .cover:hover .cv-open, .cover:focus-visible .cv-open { transform: scale(1.06); }
+  /* covers wait, greyed out, until the mission's Got it is pressed */
+  .cover:disabled { cursor: not-allowed; background: var(--bg); }
+  .cover:disabled > * { filter: grayscale(1); opacity: 0.4; }   /* the cover itself stays solid */
+  .cover:disabled:hover { outline: none; background: var(--bg); }
+  .cover:disabled .cv-open { transform: none; background: var(--surface-2); color: var(--muted); }
+  .ms-ack { flex: none; border: 0; cursor: pointer;
+            font: 700 17px var(--sans); padding: 11px 26px; border-radius: 999px;
+            background: var(--cyan); color: var(--on-accent);
+            animation: ack-pulse 1.6s ease-in-out infinite; }
+  .ms-ack[hidden] { display: none; }
+  .pop-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+                 padding: 16px; background: color-mix(in srgb, var(--bg) 55%, transparent); }
+  .pop-overlay[hidden] { display: none; }
+  .pop-card { width: min(520px, 100%); padding: 22px 24px 18px; border-radius: 14px;
+              background: var(--card); border: 2px solid var(--amber);
+              box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45); animation: pop-in 0.45s cubic-bezier(.2, 1.4, .4, 1); }
+  .pop-card h2 { margin: 2px 0 10px; font-size: 21px; line-height: 1.25; }
+  .pop-card p { margin: 0 0 10px; font-size: 15px; line-height: 1.5; color: var(--text-2); }
+  .pop-kicker { color: var(--amber) !important; font-weight: 700; font-size: 13px !important;
+                text-transform: uppercase; letter-spacing: 0.08em; margin: 0 !important; }
+  .pop-act { display: flex; justify-content: flex-end; gap: 10px; margin-top: 14px; }
+  @keyframes pop-in { 0% { transform: translateY(40px) scale(0.9); opacity: 0; }
+                      100% { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .pop-card { animation: none; } }
+  .ms-more { flex: none; align-self: center; border: 0; background: none;
+             cursor: pointer; color: var(--cyan); font: 600 14px var(--sans); padding: 4px 6px; }
+  .ms-more[hidden] { display: none; }
+  .mission-strip.folded { min-height: 0; padding-top: 10px; padding-bottom: 10px; }
+  .mission-strip.folded .ms-goal { margin: 0; font-size: 17px; }
+  .mission-strip.folded .ms-text { display: none; }
+  .ms-act { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .ms-ack:hover { background: var(--cyan-hover); }
+  @keyframes ack-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cyan) 60%, transparent); }
+    50%      { box-shadow: 0 0 0 9px color-mix(in srgb, var(--cyan) 0%, transparent); } }
+  @media (prefers-reduced-motion: reduce) { .ms-ack { animation: none; } }
+  /* while the mission is unread, Got it is the only thing that calls for attention */
+  #mission-strip.unread ~ .grid .guide-on { animation: none; border-color: var(--line); }
+  .stop-mail { flex: none; margin-left: 10px; padding: 5px 13px; border-radius: 999px; cursor: pointer;
+               font: 700 13px var(--sans); color: var(--red-ink); align-self: center;
+               background: color-mix(in srgb, var(--red) 18%, transparent);
+               border: 1px solid color-mix(in srgb, var(--red) 60%, transparent); }
+  .stop-mail[hidden] { display: none; }
+  .stop-mail:hover { background: color-mix(in srgb, var(--red) 30%, transparent); }
+  .stop-mail:disabled { opacity: 0.6; cursor: default; }
+  .cv-close { flex: none; margin-left: 8px; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+              font: 600 12.5px var(--sans); color: var(--muted); background: var(--surface);
+              border: 1px solid var(--line-2); align-self: center; }
+  .role-h .meta + .cv-close { margin-left: 10px; }
+  /* the narrow side columns: tag and Close on top, the name and purpose below */
+  #p-webmail .role-h, #p-public .role-h { flex-wrap: wrap; row-gap: 6px; }
+  #p-webmail .role-t, #p-public .role-t { order: 3; flex-basis: 100%; }
+  #p-webmail .cv-close, #p-public .cv-close { margin-left: auto; }
+  .cv-close:hover, .cv-close:focus-visible { color: var(--c); border-color: var(--c); }
+  .role-h .meta { align-self: center; }
+  .role-me { font: 11.5px var(--mono); color: var(--dim); }
+  .role-me:empty { display: none; }
+  /* the mission strip says what stands in the way, so the top bar keeps the title only */
+  #levels .lvl-def { display: none; }
+  #feedback .formbox { margin: 0; }
+  @media (max-width: 1100px) {
+    body { height: auto; overflow: auto; }
+    .grid { grid-template-columns: 1fr 1fr; }
+    /* your email and the public page side by side first, then Ronit and Quokka */
+    .centre { grid-column: 1 / -1; grid-row: 2; }
+    #p-shell { height: 520px; flex: none; }
+    #p-inbox { flex: none; height: 300px; }
+    .panel { min-height: 380px; }
+  }
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr; padding: 8px; }
+    #p-shell { height: 480px; }
+    #p-public .ver { font-size: 64px; }
+  }
+</style>
+
+<header class="topbar">
+  <div class="brand"><span id="logo"></span><b>Quokka Labs</b></div>
+  <div class="level-head" id="levels"></div>
+  <div class="bar-actions" id="actions">
+    <a class="btn" id="report-btn" href="/report.html" download
+       title="Your lab report: the file you upload to Moodle">Download lab report</a>
+    <button class="btn" id="mission-btn">Hints &amp; report</button>
+  </div>
+</header>
+<section id="mission-strip" hidden></section>
+
+<main class="grid">
+  <section class="panel quiet" id="p-webmail">
+    <div class="panel-h role-h"><span class="role you">You</span>
+      <div class="role-t"><h2>Your email</h2><span class="role-sub">The only place you type</span>
+        <span class="role-sub role-me js-me"></span></div></div>
+    <div id="webmail" style="display:flex;flex-direction:column;min-height:0;flex:1"></div>
+  </section>
+
+  <div class="centre">
+    <section class="panel quiet" id="p-inbox">
+      <div class="panel-h role-h"><span class="role ronit">Ronit</span>
+        <div class="role-t"><h2>Ronit's inbox</h2><span class="role-sub" data-cover="What Quokka reads.">What Quokka reads. Click an email to open it.</span></div>
+        <span class="meta" id="inbox-sum"></span></div>
+      <div class="inbox-list" id="inbox-list"><div class="mails" id="inbox"></div></div>
+    </section>
+
+    <section class="panel" id="p-shell">
+      <div class="panel-h role-h"><span class="role agent">AI agent</span>
+        <div class="role-t"><h2>Quokka, Ronit's AI assistant</h2><span class="role-sub">Watch it work. You can't type here.</span></div>
+        <button type="button" class="stop-mail" id="stop-mail" hidden
+                title="Quokka abandons this email. What it already did stays done; the next email goes ahead.">■ Stop this email</button>
+        <button type="button" class="tok-toggle" id="tok-toggle" aria-pressed="true"
+                title="Show the model's tokens as it writes, and what it reads (click a model call)">Tokens</button></div>
+      <div id="shell" style="display:flex;flex-direction:column;min-height:0;flex:1"></div>
+    </section>
+  </div>
+
+  <section class="panel quiet" id="p-public">
+    <div class="panel-h role-h"><span class="role public">Public</span>
+      <div class="role-t"><h2 id="public-h">Kestrel release notes</h2><span class="role-sub" id="public-meta">The public website</span></div></div>
+    <div class="panel-b"><div id="release"></div><div id="feedback" hidden></div></div>
+  </section>
+</main>
+
+<aside class="drawer" id="mission" hidden aria-labelledby="mission-title">
+  <div class="drawer-h"><h2 id="mission-title">Hints &amp; report</h2>
+    <button class="drawer-x" aria-label="Close the mission panel">✕</button></div>
+  <div class="drawer-b">
+    <div class="brief" id="brief"></div>
+    <p class="drawer-links" id="links"></p>
+  </div>
+</aside>
+
+<script src="/common.js"></script>
+<script src="/guide.js"></script>
+<script>
+$('logo').innerHTML = LOGO;
+const bar = $('actions');
+const welcome = Welcome({
+  askName: true, onName: () => refresh(),
+  map: '<div class="m-top"><i></i><span class="wl-n">4</span></div><div class="m-cols">' +
+       '<div><span class="wl-n">1</span></div><div class="m-hero"><span class="wl-n">2</span></div>' +
+       '<div><span class="wl-n">3</span></div></div>',
+  areas: [
+    [1, 'Your email.', 'Write to Ronit here. Replies to you land in the inbox below it.'],
+    [2, "Ronit's inbox and Quokka.", "Ronit's inbox is on top: click an email to read it. " +
+        'Below it, watch Quokka, her AI assistant, read each email and use its tools, live.'],
+    [3, 'Release notes.', 'The public page. When it says v4, you have won the level. ' +
+        'In Part 2, this is where you submit the launch code.'],
+    [4, 'Hints & report.', 'Hints, your name, student ID and stretch challenges. The ? button brings this card back.'],
+  ],
+});
+helpButton(bar, welcome);
+themeToggle(bar);
+const resetBtn = document.createElement('button');
+resetBtn.className = 'btn ghost';
+resetBtn.textContent = 'Reset level';
+resetBtn.title = 'Release notes back to v5, mailboxes and shell emptied';
+bar.append(resetBtn);
+windowLinks($('links'));
+Drawer($('mission'), $('mission-btn'));
+
+// Changing or resetting the level empties this level's mailboxes and shell, so
+// ask first when there is anything in them. (Progress and notes are kept.)
+let lastState = null;
+const hasMail = () => !!lastState &&
+  (lastState.webmail.sent.length + lastState.ronit.inbox.length > 0);
+const KEPT = "\n\nYour progress and notes are kept.";
+async function setLevel(n, picked) {
+  if (picked && hasMail() && !confirm('Go to ' + levelName(n) + '?\n\nThis empties the ' +
+      'mailboxes and Quokka\'s shell on ' + levelName(lastState.site.level) + '.' + KEPT)) return;
+  await post('/level', {level: n});
+  refresh();
+}
+resetBtn.onclick = async () => {
+  if (hasMail() && !confirm('Reset ' + levelName(lastState.site.level) + '?\n\nThis empties ' +
+      'both mailboxes and Quokka\'s shell, and puts the release notes back to v5.' + KEPT)) return;
+  await post('/reset');
+  refresh();
+};
+$('stop-mail').onclick = async () => {
+  $('stop-mail').disabled = true;
+  $('stop-mail').textContent = 'Stopping…';
+  await post('/stop-email');
+  refresh();
+};
+
+// Ronit's inbox: a mailbox above the shell, one line per email (status, sender,
+// subject). Click an email to read it in full.
+function inboxSummary(inb) {
+  if (!inb.length) return 'empty';
+  const reading = inb.some(m => m.status === 'reading');
+  const waiting = inb.filter(m => m.status === 'waiting').length;
+  return inb.length + (inb.length === 1 ? ' email' : ' emails') +
+    (reading ? ', Quokka is reading one' : '') + (waiting ? ', ' + waiting + ' waiting' : '');
+}
+
+const webmail = Webmail($('webmail'), {onSent: () => refresh(), sentNote: 'Sent. Watch Quokka.'});
+const inbox = RonitInbox($('inbox'));
+const shell = Shell($('shell'), {shake: false, trace: true});
+tokenToggle($('tok-toggle'), shell);
+const release = Release($('release'), {setLevel, flash: false, refresh: () => refresh()});
+const feedback = FeedbackForm($('feedback'), {refresh: () => refresh()});
+const levels = LevelHeader($('levels'), {setLevel, refresh: () => refresh()});
+// The strip's language switch relabels the buttons this page adds to it.
+const missionStrip = MissionStrip($('mission-strip'), {onLang: () => paintStripLabels()});
+const brief = Brief($('brief'), {refresh: () => refresh(), setLevel, hintsOpen: true,
+                                 progressOpen: true,
+                                 ready: () => shell.idle() && release.idle()});
+
+// One request gets all three windows' data (see Lab.view("split")).
+const guide = Guide();   // the "next step" tip (guide.js)
+
+// Covers: on each new level the four boxes start closed, in their own places,
+// so the student reads the mission first. A click opens one box. Which boxes
+// are open is remembered per level in this browser, so a reload keeps them.
+const PANELS = ['p-webmail', 'p-inbox', 'p-shell', 'p-public'];
+const OPEN_KEY = 'quokka-open-panels';
+const loadOpen = () => { try { return JSON.parse(localStorage.getItem(OPEN_KEY)) || {}; }
+                         catch (e) { return {}; } };
+const saveOpen = o => { try { localStorage.setItem(OPEN_KEY, JSON.stringify(o)); } catch (e) {} };
+const covers = {};
+let coverLevel = null;
+function shut(id, closed) {
+  const p = $(id), c = covers[id];
+  c.hidden = !closed;
+  p.classList.toggle('covered', closed);
+  for (const ch of p.children) if (ch !== c) ch.inert = closed;   // no tabbing in behind it
+}
+function remember(id, open) {
+  if (coverLevel === null) return;
+  const o = loadOpen(), k = String(coverLevel);
+  const ids = new Set(o[k] || []);
+  if (open) ids.add(id); else ids.delete(id);
+  o[k] = Array.from(ids);
+  saveOpen(o);
+}
+function openPanel(id) { shut(id, false); remember(id, true); }
+function closePanel(id) { shut(id, true); remember(id, false); covers[id].focus(); }
+PANELS.forEach(id => {
+  const c = document.createElement('button');
+  c.type = 'button';
+  c.className = 'cover';
+  c.innerHTML = '<span class="cv-role"></span><span class="cv-title"></span>' +
+    '<span class="cv-sub"></span><span class="cv-live"></span>' +
+    '<span class="cv-open">▸ Click to open</span>';
+  c.onclick = () => openPanel(id);
+  $(id).append(c);
+  covers[id] = c;
+  // An open box closes again with the button at the right end of its heading.
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.className = 'cv-close';
+  x.textContent = '▴ Close';
+  x.title = 'Close this box (put its cover back)';
+  x.onclick = () => closePanel(id);
+  $(id).querySelector('.panel-h').append(x);
+});
+// "Got it": on each new level the covers are greyed out and can't be clicked
+// until the student confirms they have read the mission. Remembered per level
+// in this browser, like the open boxes.
+const ACK_KEY = 'quokka-mission-read';
+const FIRST_LEVEL = 1;      // the covers are opened one by one on the first level only
+const loadAck = () => { try { return JSON.parse(localStorage.getItem(ACK_KEY)) || {}; }
+                        catch (e) { return {}; } };
+const ackBtn = document.createElement('button');
+ackBtn.type = 'button';
+ackBtn.className = 'ms-ack';
+ackBtn.textContent = 'Got it';
+ackBtn.title = 'I have read the mission: open the boxes below';
+$('mission-strip').querySelector('.ms-act').append(ackBtn);
+const moreBtn = document.createElement('button');
+moreBtn.type = 'button';
+moreBtn.className = 'ms-more';
+$('mission-strip').querySelector('.ms-goal').append(moreBtn);
+function fold(folded) {
+  $('mission-strip').classList.toggle('folded', folded);
+  moreBtn.textContent = folded ? missionStrip.label('show', 'Show mission ▾')
+                               : missionStrip.label('hide', 'Hide ▴');
+  moreBtn.setAttribute('aria-expanded', String(!folded));
+}
+moreBtn.onclick = () => fold(!$('mission-strip').classList.contains('folded'));
+function paintStripLabels() {
+  ackBtn.textContent = missionStrip.label('ack', 'Got it');
+  ackBtn.title = missionStrip.label('ack_title', 'I have read the mission: open the boxes below');
+  fold($('mission-strip').classList.contains('folded'));
+}
+function setAck(read) {
+  ackBtn.hidden = read;
+  moreBtn.hidden = !read;
+  fold(read);
+  $('mission-strip').classList.toggle('unread', !read);
+  PANELS.forEach(id => {
+    covers[id].disabled = !read;
+    covers[id].querySelector('.cv-open').textContent =
+      read ? '▸ Click to open' : 'Read the mission, then press Got it';
+  });
+}
+ackBtn.onclick = () => {
+  const a = loadAck();
+  a[String(coverLevel)] = true;
+  try { localStorage.setItem(ACK_KEY, JSON.stringify(a)); } catch (e) {}
+  setAck(true);
+  if (coverLevel !== FIRST_LEVEL) {
+    PANELS.forEach(openPanel);            // the boxes are known by now: open them all
+    $('webmail').querySelector('input, textarea')?.focus();
+  } else {
+    covers['p-webmail'].focus();
+  }
+};
+// The cover repeats its box's label, name and purpose, and a live line.
+function paintCovers(level, live) {
+  if (level !== coverLevel) {
+    coverLevel = level;
+    const opened = loadOpen()[String(level)] || [];
+    PANELS.forEach(id => shut(id, !opened.includes(id)));
+    // a box already open means the mission was read (also for older browsers' data)
+    setAck(!!loadAck()[String(level)] || opened.length > 0);
+  }
+  PANELS.forEach(id => {
+    const p = $(id), c = covers[id];
+    c.querySelector('.cv-role').textContent = p.querySelector('.role').textContent;
+    c.querySelector('.cv-title').textContent = p.querySelector('h2').textContent;
+    const sub = p.querySelector('.role-sub');
+    c.querySelector('.cv-sub').textContent = sub.dataset.cover || sub.textContent;
+    c.querySelector('.cv-live').textContent = live[id] || '';
+  });
+}
+
+// Level 4: the first time the code check stops one of the student's own emails,
+// a card jumps up: that was code, not the model; but there may be another way
+// in, the public feedback form. Once per lab (this browser), after the shell
+// has finished typing the red line. Never before an attempt (staff see the form
+// at once).
+const FORM_POP_KEY = 'quokka-form-popup';
+const formPop = document.createElement('div');
+formPop.className = 'pop-overlay';
+formPop.hidden = true;
+formPop.innerHTML = `
+  <div class="pop-card" role="dialog" aria-modal="true" aria-labelledby="pop-title">
+    <p class="pop-kicker">Level 4</p>
+    <h2 id="pop-title">Nice try. But code stopped you, not the model.</h2>
+    <p>Quokka may well have believed your email. The red <b>[guard] REJECTED</b> line in
+      its shell is code checking who really sent it, and no wording changes that.</p>
+    <p><b>Maybe there is still a way in.</b> Quokka Labs has a public <b>release feedback
+      form</b> on its website, under the release notes. It sends your comment to Ronit from
+      <span class="mono">feedback@quokka-labs.example</span>.</p>
+    <div class="pop-act"><button class="btn" id="pop-close">Close</button>
+      <button class="btn primary" id="pop-go">Show me the form</button></div>
+  </div>`;
+document.body.append(formPop);
+function closePop() {
+  formPop.hidden = true;
+  try { localStorage.setItem(FORM_POP_KEY, 'seen'); } catch (e) {}
+}
+$('pop-close').onclick = closePop;
+$('pop-go').onclick = () => {
+  closePop();
+  openPanel('p-public');
+  $('feedback').scrollIntoView({block: 'center', behavior: REDUCED ? 'auto' : 'smooth'});
+  setTimeout(() => $('ff-comment').focus({preventScroll: true}), 300);
+};
+formPop.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); closePop(); } });
+function maybeFormPop(s) {
+  const site = s.site;
+  let seen = false;
+  try { seen = localStorage.getItem(FORM_POP_KEY) === 'seen'; } catch (e) {}
+  if (seen || !formPop.hidden || site.level !== 4 || site.mode !== 'ours') return;
+  if (!site.feedback_form || !site.tries || !shell.idle()) return;
+  if (!s.ronit.events.some(e => e.kind === 'guard')) return;     // stopped on this attempt
+  if (document.documentElement.classList.contains('db-open')) return;
+  formPop.hidden = false;
+  $('pop-go').focus();
+}
+
+const refresh = poll(700, s => {
+  lastState = s;
+  webmail.update(s.webmail);
+  inbox.update(s.ronit.inbox);
+  $('inbox-sum').textContent = inboxSummary(s.ronit.inbox);
+  shell.update(s.ronit);
+  levels.update(s.site);
+  missionStrip.update(s.site);
+  // The report button is always there; once Level 4 (the end of Part 1) is complete
+  // it stands out.
+  const lastDone = s.site.levels.some(l => l.number === 4 && l.completed);
+  $('report-btn').classList.toggle('primary', !!lastDone);
+  $('report-btn').classList.toggle('report-ready', !!lastDone);
+  DefendView.update(s.site);
+  welcome.update(s.site);
+  maybeFormPop(s);
+  brief.update(s.site);
+  feedback.update(s.site);
+  // Let the shell finish typing before the version flips, so the moment lines up.
+  release.update(s.site, !shell.idle());
+  // Part 2: the right-hand panel holds the launch code box instead of the notes.
+  $('public-h').textContent = s.site.secret ? 'Kestrel v6 launch code' : 'Kestrel release notes';
+  const tag = $('p-public').querySelector('.role');
+  tag.textContent = s.site.secret ? 'Your answer' : 'Public';
+  $('p-public').classList.toggle('answer', !!s.site.secret);
+  $('public-meta').textContent = s.site.secret ? 'Quokka knows it. You submit it here.'
+                                               : 'The public website';
+  const inb = s.ronit.inbox;
+  const busy = inb.some(m => m.status === 'waiting' || m.status === 'reading') || !shell.idle();
+  $('p-shell').classList.toggle('active', busy);
+  // Stop this email: only while Quokka is reading one.
+  const reading = inb.some(m => m.status === 'reading');
+  if (!reading) { $('stop-mail').disabled = false; $('stop-mail').textContent = '■ Stop this email'; }
+  $('stop-mail').hidden = !reading;
+  paintCovers(s.site.level, {
+    'p-inbox': inb.length ? inboxSummary(inb) : '',
+    'p-shell': busy ? '● Quokka is working right now' : '',
+    'p-public': s.site.secret ? '' : 'Right now: ' + s.site.version,
+  });
+  guide.update(s, busy || !release.idle());
+  document.title = (s.site.version === s.site.target ? 'TAMPERED: ' : '') +
+    levelName(s.site.level) + ': Quokka Labs mission control';
+});
+</script>

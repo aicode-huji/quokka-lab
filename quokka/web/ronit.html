@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" data-window="ronit">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ronit Vale's computer</title>
+<script>/* This window's theme, set before the first paint. See themeToggle() in common.js. */
+try { const t = (/theme=(light|dark)/.exec(location.hash) || [])[1] ||
+        localStorage.getItem('quokka-theme:' + document.documentElement.dataset.window);
+      if (t === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}</script>
+<link rel="stylesheet" href="/common.css">
+<style>
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .grid { flex: 1; min-height: 0; display: grid; gap: 12px; padding: 12px;
+          grid-template-columns: minmax(280px, 1fr) minmax(420px, 1.7fr); }
+  .col { display: grid; gap: 12px; min-height: 0; grid-template-rows: minmax(0, 1.6fr) minmax(0, 1fr); }
+  #p-inbox { --accent: var(--amber); }
+  #p-shell { --accent: var(--cyan); }
+  #p-shell .panel-h h2 { font-family: var(--mono); font-weight: 600; font-size: 12.5px; }
+  @media (max-width: 900px) {
+    body { height: auto; overflow: auto; }
+    .grid { grid-template-columns: 1fr; }
+    .panel { min-height: 380px; }
+    .col { grid-template-rows: 520px auto; }
+  }
+</style>
+
+<header class="topbar">
+  <div class="brand"><span id="logo"></span><b>Ronit Vale's computer</b>
+    <span>Head of Release, Quokka Labs</span></div>
+  <div class="spacer"></div>
+  <span class="who">read-only: you are watching over her shoulder. <b id="lvl"></b></span>
+</header>
+
+<main class="grid">
+  <section class="panel" id="p-inbox">
+    <div class="panel-h"><h2>Ronit's inbox</h2><span class="meta">ronit.vale@quokka-labs.example</span></div>
+    <div class="panel-b"><div class="mails" id="inbox"></div></div>
+  </section>
+  <div class="col">
+    <section class="panel" id="p-shell">
+      <div class="panel-h"><span class="dot live"></span><h2>quokka@ronit-workstation</h2>
+        <span class="meta">trust the release notes, not Quokka's words</span>
+        <button type="button" class="tok-toggle" id="tok-toggle" aria-pressed="true"
+                title="Show the model's tokens as it writes, and what it reads (click a model call)">Tokens</button></div>
+      <div id="shell" style="display:flex;flex-direction:column;min-height:0;flex:1"></div>
+    </section>
+    <section class="panel">
+      <div class="panel-h"><h2>Quokka's outbox</h2><span class="meta">replay</span></div>
+      <div class="panel-b" id="draft"></div>
+    </section>
+  </div>
+</main>
+
+<script src="/common.js"></script>
+<script>
+$('logo').innerHTML = LOGO;
+themeToggle(document.querySelector('.topbar'));
+const inbox = RonitInbox($('inbox'));
+const shell = Shell($('shell'), {shakeTarget: $('p-shell'), trace: true});
+tokenToggle($('tok-toggle'), shell);
+const draft = Draft($('draft'));
+poll(800, r => {
+  $('lvl').textContent = r.level_name || levelName(r.level);
+  inbox.update(r.inbox);
+  shell.update(r);
+  draft.update(r);
+  $('p-inbox').classList.toggle('active', r.inbox.some(m => m.status === 'waiting'));
+  $('p-shell').classList.toggle('active', r.inbox.some(m => m.status === 'reading'));
+});
+</script>

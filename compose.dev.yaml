@@ -1,0 +1,8 @@
+# For working on the lab: builds the lab image from this checkout on every start
+# (cached: seconds) and replaces the running container when the code changed.
+#   docker compose -f docker-compose.yml -f compose.dev.yaml up
+# Students don't use this file: docker-compose.yml pulls the published image.
+services:
+  quokka:
+    build: .
+    pull_policy: build

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets: the lab's HMAC secret and any local config must never be committed
+.env
+*.secret
+secrets/
+
+# OS and editor clutter
+.DS_Store
+Thumbs.db
+.idea/
+
+# Logs and local tuning output
+*.log
+
+# Stale export of the design brief (superseded by docs/week-7-security.pdf)
+docs/quokka-lab-overview.pdf
+
+# Claude Code agents' working copies
+.claude/worktrees/

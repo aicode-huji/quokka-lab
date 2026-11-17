@@ -1,0 +1,39 @@
+/* The "next step" guide on mission control (see guide.js). Colours come from
+   the theme tokens in common.css, so light and dark both work. */
+
+/* the panel (or button) to use next: a soft ring that breathes a few times */
+.guide-on { animation: guide-ring 1.6s ease-in-out 4;
+            box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber) 55%, transparent); }
+.panel.guide-on { border-color: color-mix(in srgb, var(--amber) 60%, transparent); }
+#feedback.guide-on { border-radius: 10px; }
+@keyframes guide-ring {
+  0%, 100% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber) 55%, transparent); }
+  50%      { box-shadow: 0 0 0 5px color-mix(in srgb, var(--amber) 22%, transparent); }
+}
+
+/* the tip: one line under the panel's title bar, in the flow (it never covers anything) */
+.guide-tip {
+  flex: none; display: flex; align-items: center; gap: 9px;
+  margin: 10px 12px 0; padding: 7px 8px 7px 11px; border-radius: 8px;
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 38%, transparent);
+  color: var(--text); font-size: 13px; line-height: 1.35;
+  animation: guide-in 0.35s ease-out;
+}
+#p-shell > .guide-tip { margin-bottom: 8px; }
+.guide-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+.guide-text { flex: 1; min-width: 0; }
+.guide-ok {
+  flex: none; font: 600 12px var(--sans); color: var(--amber); cursor: pointer;
+  background: none; border: 0; border-radius: 6px; padding: 4px 7px;
+}
+.guide-ok:hover { background: color-mix(in srgb, var(--amber) 16%, transparent); }
+.guide-ok:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+@keyframes guide-in { from { opacity: 0; transform: translateY(-4px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-on, .guide-tip { animation: none; }
+}
+
+/* in the defend view the tip sits above the editor */
+.dv-edit > .guide-tip { margin: 0 0 10px; }

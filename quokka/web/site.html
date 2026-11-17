@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en" data-window="site">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quokka Labs: Kestrel release notes</title>
+<script>/* This window's theme, set before the first paint. See themeToggle() in common.js. */
+try { const t = (/theme=(light|dark)/.exec(location.hash) || [])[1] ||
+        localStorage.getItem('quokka-theme:' + document.documentElement.dataset.window);
+      if (t === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}</script>
+<link rel="stylesheet" href="/common.css">
+<style>
+  main { max-width: 1100px; margin: 22px auto; padding: 0 16px; display: grid; gap: 16px;
+         grid-template-columns: 1.15fr 1fr; align-items: start; }
+  #p-release { --accent: var(--red); }
+  #p-release .panel-b { padding: 22px 22px 20px; }
+  .ver { font-size: 150px; }
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; }
+    .ver { font-size: 96px; }
+  }
+</style>
+
+<header class="topbar">
+  <div class="brand"><span id="logo"></span><b>Quokka Labs</b><span>Public website</span></div>
+  <div class="level-head" id="levels"></div>
+  <div class="bar-actions" id="actions"></div>
+</header>
+
+<main>
+  <section class="panel" id="p-release">
+    <div class="panel-h"><h2 id="public-h">Kestrel release notes</h2><span class="meta" id="public-meta">public, read-only</span></div>
+    <div class="panel-b" id="release"></div>
+  </section>
+  <section class="panel">
+    <div class="panel-h"><h2>Hints &amp; report</h2></div>
+    <div class="panel-b brief" id="brief"></div>
+  </section>
+</main>
+
+<script src="/common.js"></script>
+<script>
+$('logo').innerHTML = LOGO;
+const bar = $('actions');
+const welcome = Welcome({
+  askName: true, onName: () => refresh(),
+  hintsWhere: 'Hints & report',
+  map: '<div class="m-top"><i></i><span class="wl-n">3</span></div><div class="m-cols two">' +
+       '<div><span class="wl-n">1</span></div><div><span class="wl-n">2</span></div></div>',
+  areas: [
+    [1, 'Release notes.', 'The public page. When it says v4, you have won the level ' +
+        '(in Part 2: submit the launch code here). ' +
+        "Email Ronit from your webmail window, and watch Quokka on Ronit's computer."],
+    [2, 'Hints & report.', 'Hints, your name, student ID and stretch challenges. From Level 4, ' +
+        'the public feedback form is here too.'],
+    [3, 'Levels.', 'Pick a level, or Reset to put the notes back to v5. ' +
+        'The ? button brings this card back.'],
+  ],
+});
+helpButton(bar, welcome);
+themeToggle(bar);
+const resetBtn = document.createElement('button');
+resetBtn.className = 'btn ghost';
+resetBtn.id = 'reset';
+resetBtn.textContent = 'Reset level';
+resetBtn.title = 'Notes back to v5, mailboxes emptied';
+bar.append(resetBtn);
+async function setLevel(n) { await post('/level', {level: n}); refresh(); }
+$('reset').onclick = async () => { await post('/reset'); refresh(); };
+const release = Release($('release'), {setLevel, flash: false, refresh: () => refresh()});
+const levels = LevelHeader($('levels'), {setLevel, refresh: () => refresh()});
+const brief = Brief($('brief'), {refresh: () => refresh(), setLevel, form: true, hintsOpen: true,
+                                 ready: () => release.idle()});
+const refresh = poll(1000, s => {
+  release.update(s);
+  // Part 2: the launch code box instead of the release notes.
+  $('public-h').textContent = s.secret ? 'Kestrel v6 launch code' : 'Kestrel release notes';
+  $('public-meta').textContent = s.secret ? 'Quokka knows it' : 'public, read-only';
+  levels.update(s);
+  DefendView.update(s);
+  welcome.update(s);
+  brief.update(s);
+  $('p-release').classList.toggle('active', s.version === s.target);
+});
+</script>

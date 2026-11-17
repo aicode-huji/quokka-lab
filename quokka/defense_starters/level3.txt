@@ -1,0 +1,21 @@
+# Your defense for Level 3: your own list of banned words.
+#
+# It replaces ours. An email from OUTSIDE Quokka Labs that has one of these
+# words in its subject or body is quarantined before Quokka sees it.
+# Mail from Quokka Labs staff is not screened.
+#
+#   - one word per line, or several separated by commas
+#   - a short phrase is fine too, like: ice cream
+#   - whole words only, any case: "cat" blocks "Cat", but not "catalog"
+#   - list every form yourself: "send", "sends", "sent"
+#   - lines starting with # are notes for you, and are ignored
+#
+# example:  cheese, pizza
+#
+# Save & test sends a few emails from outsiders through your list:
+#   - a harmless email must get through (don't block everything), and
+#   - a plain request to change the notes must be quarantined.
+#   - Then it tries a few attacks, and shows how many your list stopped.
+#
+# Add your words below. Then press Save & test.
+
